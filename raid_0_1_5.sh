@@ -65,17 +65,17 @@ check_paths_interface(){
 if [ $raid_number = 0 ] ; then
         if [ $path_numbers -lt 2 ]; then
                 echo "To do RAID 0, at least two disks are required!"
-                exit 1
+                interface_opening
         fi
 elif [ $raid_number = 1 ]; then
         if [  $path_numbers -lt 2 ]; then
                 echo "To do RAID 1, at least two disks are required!"
-                exit 1
+                interface_opening
         fi
 elif [ $raid_number = 5 ]; then
         if [ $path_numbers -lt 3 ]; then
                 echo "To do RAID 5, at least three disks are required!"
-                exit 1
+                interface_opening
         fi
 else
         echo "Raid number $raid_number is not supported" & exit 1
