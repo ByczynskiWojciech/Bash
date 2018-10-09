@@ -1,7 +1,6 @@
 #!/bin/bash
 
 #Script which automate creating raid(0,1 and 5) made while DXC intership
-#Not finished yet
 
 raid(){
 
@@ -12,10 +11,22 @@ if [ $? -eq 0 ]; then
 else
         echo "RAID was not created!" 
 fi
+
+exit
 }
 
 raid_interface(){
 count_path
+
+if [ -z $raid_number ] ; then
+	echo "You need to set Raid number!"
+	interface_opening
+fi
+
+if [ -z $disks_path ] ; then
+        echo "You need to set disks paths!"
+        interface_opening
+fi
 
 mdadm --create --verbose /dev/md0 --level=$raid_number  --raid-devices=$path_numbers $disks_path 
 
@@ -24,6 +35,8 @@ if [ $? -eq 0 ]; then
 else
         echo "RAID was not created!" 
 fi
+
+exit
 }
 
 type_of_raid(){
@@ -38,7 +51,7 @@ case $raid_number  in
         1) echo -e "You have choosen RAID 1!\n" && interface_opening;;
         5) echo -e "You have choosen RAID 5!\n" && interface_opening;;
 	6) interface_opening ;;
-        *) echo -e "Raid number $raid_number is not supported.\n" && raid_number=0 && interface_opening ;;
+        *) echo -e "Raid number $raid_number is not supported.\n" && raid_number="" && interface_opening ;;
 esac
 }
 
@@ -47,6 +60,28 @@ path_numbers=$(echo "$disks_path" | wc -w)
 #echo $path_numbers
 
 }
+
+check_paths_interface(){
+if [ $raid_number = 0 ] ; then
+        if [ $path_numbers -lt 2 ]; then
+                echo "To do RAID 0, at least two disks are required!"
+                exit 1
+        fi
+elif [ $raid_number = 1 ]; then
+        if [  $path_numbers -lt 2 ]; then
+                echo "To do RAID 1, at least two disks are required!"
+                exit 1
+        fi
+elif [ $raid_number = 5 ]; then
+        if [ $path_numbers -lt 3 ]; then
+                echo "To do RAID 5, at least three disks are required!"
+                exit 1
+        fi
+else
+        echo "Raid number $raid_number is not supported" & exit 1
+fi
+}
+
 
 change_path(){
 echo "-------------------------------------------------------------"
@@ -59,16 +94,83 @@ do
 done
 
 echo "-------------------------------------------------------------"
-echo "Podaj dyski"
-read disks_path
+echo "Write disks which you want to create Raid of. Separate disks with white-spaces (space)."
 echo "-------------------------------------------------------------"
+read disks_path
 
 count_path
-interface_opening
+disk_array=($disks_path)
 
+#check if paths are disk
+
+for ((i=0; $i < path_numbers; i++)) ; do
+	check_if=$(lsblk -dnp | grep ${disk_array[i]} | awk -F' ' '{ print $6 }')
+	echo $check_if
+
+	if [ "$check_if" = "disk" ] ; then
+		echo "This is disk!"
+	else
+		echo "${disk_array[i]} is not path to disk!"
+		path_numbers=""
+		disks_path=""
+		interface_opening
+	fi
+done
+
+#check if paths are mounted
+
+for ((i=0; $i < path_numbers; i++)) ; do
+        check_if=$(lsblk -dnp | grep ${disk_array[i]} | awk -F' ' '{ print $7 }')
+        echo $check_if
+
+        if [ -z $check_if ] ; then
+                echo "Disk ${disk_array[i] } is not mounted!"
+        else
+                echo "Disk ${disk_array[i] } is mounted!"
+                path_numbers=""
+                disks_path=""
+                interface_opening
+        fi
+done
+
+#check if paths are in raid
+
+for ((i=0; $i < path_numbers; i++)) ; do
+	check_if=$(mdadm -- examine $disk_array[i] 2> /dev/null)
+        echo $check_if
+
+        if [ -z $check_if ] ; then
+                echo "Disk ${disk_array[i] } is not in raid!"
+        else
+                echo "Disk ${disk_array[i] } is already in raid!"
+                path_numbers=""
+                disks_path=""
+                interface_opening
+        fi
+done
+
+
+#check if paths are in volumegroup
+for ((i=0; $i < path_numbers; i++)) ; do
+        check_if=$(pvs -o vg_name | grep ${disk_array[i]})
+        echo $check_if
+        
+	if [ -z $check_if ] ; then
+                echo "Disk ${disk_array[i] } is not in VG!"
+        else
+                echo "Disk ${disk_array[i] } is in VG!"
+                path_numbers=""
+                disks_path=""
+                interface_opening
+        fi
+done
+
+check_paths_interface
+interface_opening
 }
 
 change_mount(){
+echo -e "\n"
 echo "-------------------------------------------------------------"
 echo "Write where to mount raid."
 echo "-------------------------------------------------------------"
@@ -81,7 +183,6 @@ echo "You have choosen $mount_path mount path!"
 echo -e "\n"
 
 interface_opening
-
 }
 
 mount_disks(){
@@ -117,13 +218,11 @@ then
 fi
 }
 
-
-
 interface_opening(){
 echo "-------------------------------------------------------------"
 echo "Write 1 -Choose type of raid."
-echo "Write 2 -Add/delete paths of disks."
-echo "Write 3 -Add/delte path where to mount raid."
+echo "Write 2 -Add/change paths of disks."
+echo "Write 3 -Add/change path where to mount raid."
 echo "Write 4 -To start creating raid."
 echo "Wrtie 5 -To exit."
 echo "-------------------------------------------------------------"
